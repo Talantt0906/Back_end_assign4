@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 My Music App</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --primary: #bb86fc;
+            --text-main: #e0e0e0;
+            --text-sec: #b0b0b0;
+        }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            padding: 20px;
+        }
+        
+        #auth-section, #app-section {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            margin-top: 50px;
+        }
+        
+        h1, h2 { text-align: center; color: var(--primary); }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            background: #2c2c2c;
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: white;
+            box-sizing: border-box; 
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            background: var(--primary);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: 0.3s;
+        }
+        button:hover { opacity: 0.9; }
+        button.secondary { background: #333; color: white; }
+
+        .song-card {
+            background: #2a2a2a;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid var(--primary);
+        }
+        .song-info h3 { margin: 0 0 5px 0; font-size: 1.1rem; }
+        .song-info p { margin: 0; color: var(--text-sec); font-size: 0.9rem; }
+        
+        .delete-btn {
+            background: #cf6679;
+            color: black;
+            width: auto;
+            padding: 5px 12px;
+            font-size: 0.8rem;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <div id="auth-section">
+        <h1>🎵 Welcome Back</h1>
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password">
+        
+        <select id="role" style="width:100%; padding:12px; background:#2c2c2c; color:white; border-radius:8px; border:1px solid #333; margin:10px 0;">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+        </select>
+
+        <button onclick="handleRegister()">Register</button>
+        <button class="secondary" onclick="handleLogin()">Login</button>
+        <p id="msg" style="text-align:center; color:#cf6679; font-size:0.9rem;"></p>
+    </div>
+
+    <div id="app-section" class="hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h2>My Playlist</h2>
+            <button onclick="logout()" style="width:auto; background:#333; color:white;">Logout</button>
+        </div>
+
+        <div style="background:#252525; padding:15px; border-radius:10px; margin-bottom:20px;">
+            <input type="text" id="songTitle" placeholder="Song Title">
+            <input type="text" id="songArtist" placeholder="Artist">
+            <button onclick="addSong()">➕ Add Song (Admin Only)</button>
+        </div>
+
+        <div id="song-list">
+            </div>
+    </div>
+
+</div>
+
+<script>
+    const API_URL = 'http://localhost:3000/api';
+    let token = localStorage.getItem('token'); 
+
+
+    if (token) {
+        showApp();
+    }
+
+    
+    async function handleRegister() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const role = document.getElementById('role').value;
+
+        try {
+            const res = await fetch(`${API_URL}/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password, role })
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                localStorage.setItem('token', data.token);
+                token = data.token;
+                showApp();
+            } else {
+                document.getElementById('msg').innerText = data.error || 'Registration failed';
+            }
+        } catch (err) { console.error(err); }
+    }
+
+    async function handleLogin() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
+        try {
+            const res = await fetch(`${API_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                localStorage.setItem('token', data.token);
+                token = data.token;
+                showApp();
+            } else {
+                document.getElementById('msg').innerText = data.message || 'Login failed';
+            }
+        } catch (err) { console.error(err); }
+    }
+
+    function logout() {
+        localStorage.removeItem('token');
+        location.reload(); 
+    }
+
+    function showApp() {
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('app-section').classList.remove('hidden');
+        loadSongs(); 
+    }
+
+    // --- Song Logic ---
+
+    async function loadSongs() {
+        const res = await fetch(`${API_URL}/songs`);
+        const songs = await res.json();
+        
+        const list = document.getElementById('song-list');
+        list.innerHTML = ''; 
+
+        songs.forEach(song => {
+            const div = document.createElement('div');
+            div.className = 'song-card';
+            div.innerHTML = `
+                <div class="song-info">
+                    <h3>${song.title}</h3>
+                    <p>${song.artist}</p>
+                </div>
+                <button class="delete-btn" onclick="deleteSong('${song._id}')">Delete</button>
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    async function addSong() {
+        const title = document.getElementById('songTitle').value;
+        const artist = document.getElementById('songArtist').value;
+
+        const res = await fetch(`${API_URL}/songs`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({ title, artist })
+        });
+
+        if (res.ok) {
+            document.getElementById('songTitle').value = ''; 
+            document.getElementById('songArtist').value = '';
+            loadSongs(); 
+        } else {
+            alert('Add failed! You might not be an Admin, or your token expired.');
+        }
+    }
+
+    async function deleteSong(id) {
+        if(!confirm('Are you sure you want to delete this?')) return;
+
+        const res = await fetch(`${API_URL}/songs/${id}`, {
+            method: 'DELETE',
+            headers: { 
+                'Authorization': `Bearer ${token}` 
+            }
+        });
+
+        if (res.ok) {
+            loadSongs();
+        } else {
+            alert('Delete failed! Only Admins can delete.');
+        }
+    }
+</script>
+
+</body>
+</html>
